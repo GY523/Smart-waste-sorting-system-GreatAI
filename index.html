@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoPoints - Smart Waste Sorting System</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/aws-sdk@2.1563.0/dist/aws-sdk.min.js"></script>
+</head>
+<body>
+    <div class="kiosk-container">
+        <div class="header">
+            <div class="logo-container">
+                <div class="logo-icon">♻️</div>
+                <div class="brand-text">
+                    <h1>Smart Waste Sorting System</h1>
+                    <div class="trademark">Powered by <span class="ecopoints">EcoPoints</span></div>
+                </div>
+            </div>
+            <p>Scan • Sort • Earn • Redeem • Save Environment</p>
+            <div class="status-bar">
+                <span id="sessionInfo">Ready for new session</span>
+                <span id="timeDisplay"></span>
+                <span id="connectionStatus">❓ Camera Access Needed</span>
+                <button onclick="toggleDebugPanel()" style="background: #333; color: white; border: none; padding: 5px 10px; border-radius: 3px; margin-left: 10px;">Debug</button>
+                <button onclick="testSageMakerEndpoint()" style="background: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 3px; margin-left: 5px;">Test AI</button>
+            </div>
+            
+            <!-- Debug Panel -->
+            <div id="debugPanel" style="display: none; position: fixed; top: 80px; right: 10px; width: 300px; background: rgba(0,0,0,0.9); color: white; padding: 15px; border-radius: 8px; font-size: 12px; z-index: 1000; max-height: 400px; overflow-y: auto;">
+                <h4 style="margin: 0 0 10px 0;">🔧 Debug Panel</h4>
+                <div id="debugContent"></div>
+                <button onclick="clearDebugData()" style="background: #f44336; color: white; border: none; padding: 5px 10px; border-radius: 3px; margin-top: 10px;">Clear Data</button>
+            </div>
+        </div>
+
+        <!-- QR Code Results -->
+        <div class="qr-results" id="qrResults" style="display: none;">
+            <div class="success-animation">
+                <div class="success-icon">🌟</div>
+                <h2>Mission Accomplished!</h2>
+                <p class="points-earned">
+                    You've earned <span id="finalPoints" class="points-highlight">0</span> EcoPoints!
+                </p>
+            </div>
+            
+            <div class="results-row">
+                <div class="final-results">
+                    <h3>Items Scanned:</h3>
+                    <div class="final-scanned-items" id="finalScannedItems">
+                        <!-- Scanned items will be displayed here -->
+                    </div>
+                    <div class="final-total-points" id="finalTotalPoints">
+                        <!-- Total points will be displayed here -->
+                    </div>
+                </div>
+                
+                <div class="qr-section">
+                    <div class="qr-code" id="qrCodeDisplay">
+                        <!-- QR code will be generated here -->
+                    </div>
+                    <div class="qr-instruction">
+                        <div class="instruction-icon">📱</div>
+                        <p>Scan this QR code with your mobile app to claim your EcoPoints!</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="new-session-container">
+                <button class="new-session-btn" id="newSessionButton">
+                    <span class="button-icon">🔄</span>
+                    START NEW SESSION
+                </button>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <!-- Welcome Screen -->
+            <div class="screen active" id="welcomeScreen">
+                <div class="welcome-screen">
+                    <div class="welcome-icon">🌍</div>
+                    <h2>Welcome to the Future of Recycling</h2>
+                    <p class="welcome-subtitle">
+                        Transform waste into rewards with AI-powered sorting
+                    </p>
+                    <div class="features-grid">
+                        <div class="feature-item">
+                            <div class="feature-icon">📱</div>
+                            <span>Smart Recognition</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">⚡</div>
+                            <span>Instant Points</span>
+                        </div>
+                        <div class="feature-item">
+                            <div class="feature-icon">🎁</div>
+                            <span>Redeem Rewards</span>
+                        </div>
+                    </div>
+                    
+                    <div class="permission-prompt" id="permissionPrompt">
+                        <p>To start scanning, we need access to your camera</p>
+                        <button class="permission-btn" id="permissionBtn">
+                            Allow Camera Access
+                        </button>
+                    </div>
+                    
+                    <div class="start-button-container">
+                        <button class="start-button" id="startButton" disabled>
+                            <span class="button-icon">🚀</span>
+                            START SORTING
+                        </button>
+                    </div>
+                    <div class="mobile-reminder">
+                        <div class="reminder-icon">📱</div>
+                        <p>Have your phone ready to scan the final QR code</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Camera Scanning Screen -->
+            <div class="screen" id="scanningScreen">
+                <div class="scanning-header">
+                    <button class="control-btn scan-btn" id="scanButton">
+                        SCAN ITEM
+                    </button>
+                    <h2>🔍 AI Waste Recognition</h2>
+                    <button class="control-btn finish-btn" id="finishButton" disabled>
+                        FINISH
+                    </button>
+                </div>
+
+                
+                <div class="camera-container">
+                    <video class="camera-feed" id="cameraFeed" autoplay playsinline></video>
+                    <div class="camera-overlay">
+                        <div id="scanningText">Position item within frame</div>
+                    </div>
+                </div>
+                
+                <div class="distance-indicator">
+                    <span>Distance:</span>
+                    <div class="distance-bar">
+                        <div class="distance-fill" id="distanceFill"></div>
+                    </div>
+                    <span id="distanceText">Allow camera access first</span>
+                </div>
+                
+                <div id="loadingIndicator" class="loading" style="display: none;"></div>
+                <div id="errorMessage" class="error-message" style="display: none;"></div>
+                <div id="successMessage" class="success-message" style="display: none;"></div>
+
+
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code Library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <!-- SageMaker Configuration -->
+    <script src="sagemaker-config.js"></script>
+    <script>
+        // Initialize SageMaker on page load
+        initializeSageMaker();
+        window.AWS_DISABLED = false; // Enable AWS for AI endpoint
+    </script>
+    <!-- App Logic -->
+    <script src="app.js"></script>
+
+    <script>
+        // Generate QR code in JSON format for mobile scanning
+        const qrCodeDisplay = document.getElementById('qrCodeDisplay');
+        const finalPointsSpan = document.getElementById('finalPoints');
+
+        function generateQRCode(points, sessionId) {
+            finalPointsSpan.textContent = points;
+
+            const qrPayload = {
+                points: points,
+                sessionId: sessionId,
+                code: Math.random().toString(36).substring(2, 10).toUpperCase()
+            };
+
+            const qrData = JSON.stringify(qrPayload);
+
+            qrCodeDisplay.innerHTML = '';
+            const canvas = document.createElement('canvas');
+            qrCodeDisplay.appendChild(canvas);
+
+            QRCode.toCanvas(canvas, qrData, { width: 280, margin: 1 }, function (error) {
+                if (error) console.error(error);
+                else console.log('QR code generated (JSON)!');
+            });
+        }
+
+        // Hook finish button to updated QR generator
+        const finishButton = document.getElementById('finishButton');
+        finishButton.addEventListener('click', () => {
+            const totalPoints = window.totalPoints || 0;
+            const sessionId = window.kiosk?.currentSession?.sessionId || 'UNKNOWN';
+            generateQRCode(totalPoints, sessionId);
+
+            document.getElementById('scanningScreen').classList.remove('active');
+            document.getElementById('qrResults').style.display = 'flex';
+        });
+
+        // New session button
+        document.getElementById('newSessionButton').addEventListener('click', () => {
+            document.getElementById('qrResults').style.display = 'none';
+            document.getElementById('welcomeScreen').classList.add('active');
+            window.totalPoints = 0;
+        });
+        
+        // Debug panel functions
+        window.toggleDebugPanel = function() {
+            const panel = document.getElementById('debugPanel');
+            if (panel.style.display === 'none') {
+                panel.style.display = 'block';
+                updateDebugPanel();
+            } else {
+                panel.style.display = 'none';
+            }
+        };
+        
+        window.updateDebugPanel = function() {
+            const content = document.getElementById('debugContent');
+            const awsActivities = JSON.parse(localStorage.getItem('awsActivities') || '[]');
+            const kioskSessions = JSON.parse(localStorage.getItem('kioskSessions') || '[]');
+            const wasteTypes = JSON.parse(localStorage.getItem('wasteTypes') || '{}');
+            
+            content.innerHTML = `
+                <div><strong>AWS Activities (${awsActivities.length}):</strong></div>
+                ${awsActivities.slice(-5).map(a => `
+                    <div style="margin: 5px 0; padding: 5px; background: rgba(76,175,80,0.2); border-radius: 3px;">
+                        ${a.action} - ${a.table}<br>
+                        <small>${new Date(a.timestamp).toLocaleTimeString()}</small>
+                    </div>
+                `).join('')}
+                
+                <div style="margin-top: 15px;"><strong>Kiosk Sessions (${kioskSessions.length}):</strong></div>
+                ${kioskSessions.slice(-3).map(s => `
+                    <div style="margin: 5px 0; padding: 5px; background: rgba(33,150,243,0.2); border-radius: 3px;">
+                        ${s.sessionId.substr(-8)} - ${s.totalPoints} pts<br>
+                        <small>${s.status} - ${new Date(s.timestamp).toLocaleTimeString()}</small>
+                    </div>
+                `).join('')}
+                
+                <div style="margin-top: 15px;"><strong>Waste Types:</strong></div>
+                <div style="font-size: 11px;">${JSON.stringify(wasteTypes, null, 2)}</div>
+            `;
+        };
+        
+        window.clearDebugData = function() {
+            localStorage.removeItem('awsActivities');
+            localStorage.removeItem('kioskSessions');
+            localStorage.removeItem('wasteTypes');
+            updateDebugPanel();
+            console.log('🗑️ Debug data cleared');
+        };
+        
+        // Auto-update debug panel every 2 seconds if visible
+        setInterval(() => {
+            const panel = document.getElementById('debugPanel');
+            if (panel && panel.style.display === 'block') {
+                updateDebugPanel();
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

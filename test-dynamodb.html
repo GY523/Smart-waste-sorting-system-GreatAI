@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DynamoDB Test</title>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.921.0.min.js"></script>
+</head>
+<body>
+    <h1>DynamoDB Connection Test</h1>
+    <button onclick="testConnection()">Test DynamoDB Connection</button>
+    <div id="results"></div>
+
+    <script>
+        // Configure AWS SDK
+        AWS.config.update({
+            region: 'us-east-1',
+            credentials: new AWS.CognitoIdentityCredentials({
+                IdentityPoolId: 'us-east-1:12345678-1234-1234-1234-123456789012'
+            })
+        });
+
+        async function testConnection() {
+            const results = document.getElementById('results');
+            results.innerHTML = '<p>Testing DynamoDB connection...</p>';
+            
+            try {
+                const dynamodb = new AWS.DynamoDB.DocumentClient();
+                
+                // Test 1: List tables
+                const listParams = {};
+                const tableList = await new AWS.DynamoDB().listTables(listParams).promise();
+                results.innerHTML += `<p>✅ Connected to DynamoDB. Tables: ${tableList.TableNames.join(', ')}</p>`;
+                
+                // Test 2: Try to get an item
+                const getParams = {
+                    TableName: 'WasteTypes',
+                    Key: { wasteType: 'Plastic Bottle' }
+                };
+                
+                const result = await dynamodb.get(getParams).promise();
+                if (result.Item) {
+                    results.innerHTML += `<p>✅ Successfully retrieved item: ${JSON.stringify(result.Item)}</p>`;
+                } else {
+                    results.innerHTML += `<p>⚠️ No item found for 'Plastic Bottle'</p>`;
+                }
+                
+                // Test 3: Store a test session
+                const sessionParams = {
+                    TableName: 'KioskSessions',
+                    Item: {
+                        sessionId: 'TEST_' + Date.now(),
+                        totalPoints: 25,
+                        itemCount: 2,
+                        items: [
+                            { type: 'Plastic Bottle', points: 15 },
+                            { type: 'Aluminum Can', points: 10 }
+                        ],
+                        timestamp: new Date().toISOString(),
+                        status: 'test'
+                    }
+                };
+                
+                await dynamodb.put(sessionParams).promise();
+                results.innerHTML += `<p>✅ Successfully stored test session</p>`;
+                
+            } catch (error) {
+                results.innerHTML += `<p>❌ Error: ${error.message}</p>`;
+                console.error('DynamoDB test error:', error);
+            }
+        }
+    </script>
+</body>
+</html>
